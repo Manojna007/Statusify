@@ -85,11 +85,11 @@ async function ensureFFmpegLoaded() {
     state.ffmpegLoading = true;
     showAlert('Loading FFmpeg…', 'info');
 
-    // Load LOCAL ffmpeg wrapper (v0.12)
+    // Load UMD build (NOT ESM)
     await new Promise((resolve, reject) => {
         if (window.FFmpeg) return resolve();
         const s = document.createElement('script');
-        s.src = '/libs/ffmpeg.min.js';
+        s.src = '/libs/ffmpeg.umd.js';
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
