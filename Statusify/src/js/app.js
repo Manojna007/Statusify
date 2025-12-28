@@ -89,7 +89,7 @@ async function ensureFFmpegLoaded() {
     await new Promise((resolve, reject) => {
         if (window.FFmpeg) return resolve();
         const s = document.createElement('script');
-        s.src = '/libs/ffmpeg.umd.js';
+        s.src = '/libs/ffmpeg.min.js';
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
