@@ -77,13 +77,17 @@ async function ensureFFmpegLoaded() {
     if (state.ffmpegLoaded) return;
     if (state.ffmpegLoading) return;
 
-    state.ffmpegLoading = true;
-    showAlert('Loading FFmpeg… (first time only)', 'info');
+    if (!window.crossOriginIsolated) {
+        showAlert('FFmpeg requires cross-origin isolation', 'error');
+        throw new Error('Not cross-origin isolated');
+    }
 
-    // Load FFmpeg v0.12.x
+    state.ffmpegLoading = true;
+    showAlert('Loading FFmpeg…', 'info');
+
     await new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js';
+        s.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js';
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
@@ -93,8 +97,8 @@ async function ensureFFmpegLoaded() {
     const ffmpeg = new FFmpeg();
 
     await ffmpeg.load({
-        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js',
-        wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm'
+        coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js',
+        wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm'
     });
 
     state.ffmpeg = ffmpeg;
@@ -103,6 +107,7 @@ async function ensureFFmpegLoaded() {
 
     showAlert('FFmpeg ready ✅', 'success');
 }
+
 
 // ===== FILE HANDLING =====
 function handleFileSelect(file) {
