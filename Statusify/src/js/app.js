@@ -75,47 +75,33 @@ function showAlert(message, type = 'info') {
 // ===== FFmpeg (load on demand) =====
 async function ensureFFmpegLoaded() {
     if (state.ffmpegLoaded) return;
-    if (state.ffmpegLoading) {
-        return new Promise((res) => {
-            const check = () => {
-                if (state.ffmpegLoaded) return res();
-                setTimeout(check, 200);
-            };
-            check();
-        });
-    }
+    if (state.ffmpegLoading) return;
 
     state.ffmpegLoading = true;
-    showAlert('Loading ffmpeg (for MP4 conversion) — may take a few seconds...', 'info');
+    showAlert('Loading FFmpeg… (first time only)', 'info');
 
-    // load ffmpeg script
+    // Load FFmpeg v0.12.x
     await new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Failed to load ffmpeg script'));
+        s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js';
+        s.onload = resolve;
+        s.onerror = reject;
         document.head.appendChild(s);
     });
 
-    try {
-        // create FFmpeg with explicit corePath to ensure wasm core loads
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ff = createFFmpeg({
-            log: true,
-            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-        });
-        await ff.load();
-        state.ffmpeg = ff;
-        state.fetchFile = fetchFile;
-        state.ffmpegLoaded = true;
-        console.log('ffmpeg loaded');
-        showAlert('ffmpeg loaded', 'success');
-    } catch (err) {
-        console.error('ffmpeg load error', err);
-        showAlert('Failed to initialize ffmpeg — MP4 conversion will not be available', 'warning');
-    } finally {
-        state.ffmpegLoading = false;
-    }
+    const { FFmpeg } = window;
+    const ffmpeg = new FFmpeg();
+
+    await ffmpeg.load({
+        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js',
+        wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm'
+    });
+
+    state.ffmpeg = ffmpeg;
+    state.ffmpegLoaded = true;
+    state.ffmpegLoading = false;
+
+    showAlert('FFmpeg ready ✅', 'success');
 }
 
 // ===== FILE HANDLING =====
@@ -363,41 +349,35 @@ function renderChunks() {
 }
 
 // ===== FFmpeg helper: trim original file to MP4 =====
-async function sliceWithFFmpeg(file, start, duration, outputName = 'output.mp4') {
-    if (!state.ffmpegLoaded || !state.ffmpeg || !state.fetchFile) {
-        throw new Error('ffmpeg not ready');
-    }
+async function sliceWithFFmpeg(file, start, duration, outputName) {
     const ff = state.ffmpeg;
-    const fetchFile = state.fetchFile;
-    const ext = (file.name && file.name.split('.').pop()) || 'input';
-    const inputName = `input.${ext}`;
-    try {
-        // write original file into ffmpeg FS
-        ff.FS('writeFile', inputName, await fetchFile(file));
-        // run ffmpeg to cut and re-encode to MP4
-        await ff.run(
-            '-ss', String(start),
-            '-i', inputName,
-            '-t', String(duration),
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',
-            '-crf', '23',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            outputName
-        );
-        const data = ff.FS('readFile', outputName);
-        // cleanup FS
-        try { ff.FS('unlink', inputName); } catch (e) {}
-        try { ff.FS('unlink', outputName); } catch (e) {}
-        return new Blob([data.buffer], { type: 'video/mp4' });
-    } catch (err) {
-        // cleanup on error
-        try { ff.FS('unlink', inputName); } catch (e) {}
-        try { ff.FS('unlink', outputName); } catch (e) {}
-        throw err;
-    }
+
+    // write input
+    await ff.writeFile('input', await fetchFile(file));
+
+    // execute ffmpeg
+    await ff.exec([
+        '-ss', `${start}`,
+        '-i', 'input',
+        '-t', `${duration}`,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        outputName
+    ]);
+
+    // read output
+    const data = await ff.readFile(outputName);
+
+    // cleanup
+    await ff.deleteFile('input');
+    await ff.deleteFile(outputName);
+
+    return new Blob([data.buffer], { type: 'video/mp4' });
 }
+
 
 // Replace downloadChunk: use ffmpeg on original file (no playback)
 async function downloadChunk(chunk) {
