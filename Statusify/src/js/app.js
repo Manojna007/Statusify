@@ -362,34 +362,44 @@ function renderChunks() {
 }
 
 // ===== FFmpeg helper: trim original file to MP4 =====
-async function sliceWithFFmpeg(file, start, duration, outputName) {
+async function sliceWithFFmpeg(file, start, duration, outputName = 'output.mp4') {
+    if (!state.ffmpegLoaded || !state.ffmpeg || !state.fetchFile) {
+        throw new Error('ffmpeg not ready');
+    }
+
     const ff = state.ffmpeg;
+    const fetchFile = state.fetchFile;
 
-    // write input
-    await ff.writeFile('input', await fetchFile(file));
+    const ext = file.name.split('.').pop();
+    const inputName = `input.${ext}`;
 
-    // execute ffmpeg
-    await ff.exec([
-        '-ss', `${start}`,
-        '-i', 'input',
-        '-t', `${duration}`,
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        outputName
-    ]);
+    try {
+        ff.FS('writeFile', inputName, await fetchFile(file));
 
-    // read output
-    const data = await ff.readFile(outputName);
+        await ff.run(
+            '-ss', String(start),
+            '-i', inputName,
+            '-t', String(duration),
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-crf', '23',
+            '-c:a', 'aac',
+            '-b:a', '128k',
+            outputName
+        );
 
-    // cleanup
-    await ff.deleteFile('input');
-    await ff.deleteFile(outputName);
+        const data = ff.FS('readFile', outputName);
 
-    return new Blob([data.buffer], { type: 'video/mp4' });
+        ff.FS('unlink', inputName);
+        ff.FS('unlink', outputName);
+
+        return new Blob([data.buffer], { type: 'video/mp4' });
+    } catch (err) {
+        console.error('FFmpeg error', err);
+        throw err;
+    }
 }
+
 
 
 // Replace downloadChunk: use ffmpeg on original file (no playback)
