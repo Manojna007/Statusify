@@ -77,6 +77,7 @@ async function ensureFFmpegLoaded() {
     if (state.ffmpegLoaded) return;
     if (state.ffmpegLoading) return;
 
+    // Cross-origin isolation is mandatory for ffmpeg.wasm
     if (!window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
         showAlert('Cross-origin isolation required', 'error');
         throw new Error('Isolation missing');
@@ -85,10 +86,11 @@ async function ensureFFmpegLoaded() {
     state.ffmpegLoading = true;
     showAlert('Loading FFmpeg…', 'info');
 
+    // Load FFmpeg UMD wrapper (v0.11.6)
     await new Promise((resolve, reject) => {
         if (window.FFmpeg) return resolve();
         const s = document.createElement('script');
-        s.src = '/libs/ffmpeg.min.js';
+        s.src = `${location.origin}/libs/ffmpeg.min.js`;   // ✅ absolute URL
         s.onload = resolve;
         s.onerror = reject;
         document.head.appendChild(s);
@@ -96,9 +98,10 @@ async function ensureFFmpegLoaded() {
 
     const { createFFmpeg, fetchFile } = FFmpeg;
 
+    // IMPORTANT: corePath MUST be absolute for worker resolution
     const ffmpeg = createFFmpeg({
         log: true,
-        corePath: '/libs/ffmpeg-core.js'
+        corePath: `${location.origin}/libs/ffmpeg-core.js` // ✅ absolute URL
     });
 
     await ffmpeg.load();
@@ -110,6 +113,7 @@ async function ensureFFmpegLoaded() {
 
     showAlert('FFmpeg ready ✅', 'success');
 }
+
 
 
 
