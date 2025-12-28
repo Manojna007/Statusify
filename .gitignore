@@ -1,1 +1,19 @@
+# macOS
 .DS_Store
+
+# Node dependencies
+node_modules/
+
+# Local ffmpeg libs
+libs/
+
+# Environment files
+.env
+
+# Editor / OS files
+.vscode/
+npm-debug.log
+yarn-error.log
+
+# Build
+
