@@ -76,36 +76,60 @@ function showAlert(message, type = 'info') {
 async function ensureFFmpegLoaded() {
     if (state.ffmpegLoaded) return;
     if (state.ffmpegLoading) return;
-
-    if (!window.crossOriginIsolated) {
-        showAlert('FFmpeg requires cross-origin isolation', 'error');
-        throw new Error('Not cross-origin isolated');
+    // require cross-origin isolation (SharedArrayBuffer)
+    if (!window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
+        showAlert('Enable cross-origin isolation: run the local server that sets COOP+COEP (see README)', 'error');
+        throw new Error('Cross-origin isolation / SharedArrayBuffer missing');
     }
 
     state.ffmpegLoading = true;
     showAlert('Loading FFmpeg…', 'info');
 
-    await new Promise((resolve, reject) => {
+    const cdnWrapper = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js';
+    const localCoreJS = '/libs/ffmpeg-core.js';
+    const localCoreWasm = '/libs/ffmpeg-core.wasm';
+
+    const loadScript = (src) => new Promise((res, rej) => {
+        if (document.querySelector(`script[src="${src}"]`)) return res();
         const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js';
-        s.onload = resolve;
-        s.onerror = reject;
+        s.src = src;
+        s.onload = res;
+        s.onerror = () => rej(new Error('Failed to load ' + src));
         document.head.appendChild(s);
     });
 
-    const { FFmpeg } = window;
-    const ffmpeg = new FFmpeg();
+    try {
+        // try local wrapper first, fallback to CDN wrapper
+        try { await loadScript(cdnWrapper); } catch (e) { }
 
-    await ffmpeg.load({
-        coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js',
-        wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm'
-    });
+        if (typeof FFmpeg === 'undefined' || typeof FFmpeg.createFFmpeg !== 'function') {
+            throw new Error('FFmpeg wrapper not available');
+        }
 
-    state.ffmpeg = ffmpeg;
-    state.ffmpegLoaded = true;
-    state.ffmpegLoading = false;
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        state.fetchFile = fetchFile;
 
-    showAlert('FFmpeg ready ✅', 'success');
+        // Ensure core files are same-origin and available
+        // we instruct ffmpeg to load core from local libs
+        const ff = createFFmpeg({
+            log: true,
+            corePath: localCoreJS // ffmpeg will resolve wasm relative to this
+        });
+
+        ff.setLogger(({ type, message }) => console.debug('ffmpeg:', type, message));
+        ff.setProgress(({ ratio }) => console.debug('ffmpeg progress', (ratio * 100).toFixed(1) + '%'));
+
+        await ff.load(); // will fetch local core JS/WASM
+        state.ffmpeg = ff;
+        state.ffmpegLoaded = true;
+        showAlert('FFmpeg loaded locally ✅', 'success');
+    } catch (err) {
+        console.error('ensureFFmpegLoaded error', err);
+        showAlert('Failed to load ffmpeg locally. Ensure /libs/ffmpeg-core.js and .wasm exist and server sets COOP+COEP.', 'error');
+        throw err;
+    } finally {
+        state.ffmpegLoading = false;
+    }
 }
 
 
