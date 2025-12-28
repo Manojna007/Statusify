@@ -78,14 +78,13 @@ async function ensureFFmpegLoaded() {
     if (state.ffmpegLoading) return;
 
     if (!window.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
-        showAlert('Cross-origin isolation is required for video export', 'error');
-        throw new Error('Cross-origin isolation missing');
+        showAlert('Cross-origin isolation required', 'error');
+        throw new Error('Isolation missing');
     }
 
     state.ffmpegLoading = true;
     showAlert('Loading FFmpeg…', 'info');
 
-    // Load UMD build (NOT ESM)
     await new Promise((resolve, reject) => {
         if (window.FFmpeg) return resolve();
         const s = document.createElement('script');
@@ -95,20 +94,23 @@ async function ensureFFmpegLoaded() {
         document.head.appendChild(s);
     });
 
-    const { FFmpeg } = window;
-    const ffmpeg = new FFmpeg();
+    const { createFFmpeg, fetchFile } = FFmpeg;
 
-    await ffmpeg.load({
-        coreURL: '/libs/ffmpeg-core.js',
-        wasmURL: '/libs/ffmpeg-core.wasm'
+    const ffmpeg = createFFmpeg({
+        log: true,
+        corePath: '/libs/ffmpeg-core.js'
     });
 
+    await ffmpeg.load();
+
     state.ffmpeg = ffmpeg;
+    state.fetchFile = fetchFile;
     state.ffmpegLoaded = true;
     state.ffmpegLoading = false;
 
     showAlert('FFmpeg ready ✅', 'success');
 }
+
 
 
 // ===== FILE HANDLING =====
