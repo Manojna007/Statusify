@@ -4,8 +4,7 @@
 # Node dependencies
 node_modules/
 
-# Local ffmpeg libs
-libs/
+
 
 # Environment files
 .env
